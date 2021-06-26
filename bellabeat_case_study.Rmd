@@ -1,0 +1,364 @@
+---
+title: "Bellabeat_case_study"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+# SCENARIO
+You are a junior data analyst working on the marketing analyst team at Bellabeat, a high-tech manufacturer of health-focused products for women. Bellabeat is a successful small company, but they have the potential to become a larger player in the global smart device market. Urška Sršen, cofounder and Chief Creative Officer of Bellabeat, believes that analyzing smart device fitness data could help unlock new growth opportunities for the company. You have been asked to focus on one of Bellabeat’s products and analyze smart device data to gain insight into how consumers are using their smart devices. The insights you discover will then help guide marketing strategy for the company. You will present your analysis to the Bellabeat executive team along with your high-level recommendations for Bellabeat’s marketing strategy
+
+## 1. Ask
+
+The goal of this project is to define a new marketing strategy for Bellabeat company in order to grow the sales of its Smart devices. In order to do that, Smart devices data will be explored to have an overview of how the customers use these devices and have an idea of the user profile to address the marketing campaign. The analysis results will be presented to the company co founders.
+
+
+## 2. Prepare
+The dataset that will be used for the analysis is the following one:
+
+FitBit Fitness Tracker Data (CC0: Public Domain, dataset made available through Mobius): This Kaggle data set contains personal fitness tracker from thirty fitbit users. Thirty eligible Fitbit users consented to the submission of personal tracker data, including minute-level output for physical activity, heart rate, and sleep monitoring. It includes information about daily activity, steps, and heart rate that can be used to explore users’ habits.
+
+The dataset is organized in different .csv files storing data about:
+
+* Sleeping hours
+* Activity
+* Intensities
+* Calories
+* Weight
+* Heartrate
+
+There are minute, hour and daily level files. For the minute level files there are both the long and wide format.
+
+I will focus on the following files for the analysis:
+
+* dailyActivity_merged.csv → It contains information about the daily steps,    walked distance, activity and calories of 33 different users (940 observations).
+
+* weightLogInfo_merged.csv → It contains information about weight logs of different users in Kg and Pounds, as well as the Body Mass Index (BMI), a measure of the body corpulence based on the height and weight of the person (68 observations). It has only information about 8 users, which do not represent the overall population, so I am not going to use it for the analysis.
+
+* sleepDay_merged.csv → It contains information about the daily sleep records, minutes asleep and time in bed of different users (462 observations).
+
+* heartrate_seconds_merged.csv → It contains information about the heart rate of different users, which is measured each 5 seconds (2483658 observations).
+
+* minuteMETsNarrow_merged.csv → It contains information about minute measures of the METs (metabolic equivalents) of 33 different users (1325580 observations). As it is defined in this article, “One MET is defined as the energy you use when you’re resting or sitting still. An activity that has a value of 4 METs means you’re exerting four times the energy than you would if you were sitting still. 
+
+As the dataset does not contain information about the users age and gender, I am going to consider that the samples have been taken randomly and they represent the whole population. Nevertheless, I will try to obtain a user profile from the analysis.
+
+## 3. Process
+We will use R for analysis and visualizatin.
+First of all, I have imported the different tables of the dataset:
+(before importing the dataset lets install and load all the important libraries:)
+
+```{r}
+install.packages("tidyverse")
+install.packages("here")
+install.packages("skimr")
+install.packages("janitor")
+install.packages("lubridate")
+library(tidyverse)
+library(here)
+library(skimr)
+library(janitor)
+library(lubridate)
+
+
+```
+
+```{r}
+heartrate <- read_csv('heartrate_seconds_merged.csv')
+sleep <- read_csv('sleepDay_merged.csv')
+activity <- read_csv('dailyActivity_merged.csv')
+MET <- read_csv('minuteMETsNarrow_merged.csv')
+
+```
+
+NOW LETS TAKE A LOOK AT THE FOLLOWING TABLES:-
+
+* ### Heart Rate
+
+```{r}
+skim_without_charts(heartrate)
+```
+
+```{r}
+head(heartrate)
+```
+
+The table contains a numeric Id for the different users, a numeric value for the heart rate and the time of the measure with char format.
+
+```{r}
+heartrate %>%
+  group_by(Id) %>%
+  summarize(max_rate = max(Value),min_rate = min(Value), mean_rate = mean(Value))
+
+```
+
+Before transforming some inconsistent data, I have taken a quick look at the table. It has information about 14 users (less than the 50% of the population) but, as I think this data is important I will perform a reduced analysis of it. The normal average heart rate for adults is between 60 and 100 bpm, so it seems that the values are coherent.
+
+I have arranged the columns names and time and date formats, so the result table is like the following one:
+
+```{r}
+heartrate_clean <- heartrate %>%
+   rename_with(tolower) %>%
+   rename(rate_value=value) %>%
+   mutate(date=format(as.POSIXct(time, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone()), format = "%m/%d/%y")) %>%
+   mutate(time=format(as.POSIXct(time, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone()), format = "%H:%M:%S"))
+
+```
+
+now the table will look like:
+
+```{r}
+head(heartrate_clean)
+```
+
+* ### Sleep Records
+
+```{r}
+skim_without_charts(sleep)
+```
+
+```{r}
+head(sleep)
+```
+
+The table contains a numeric Id for the different users, a numeric double value for the sleep records and the time of the measure with char format.
+
+```{r}
+sleep%>%
+   group_by(Id) %>%
+   summarize(max_asleep = max(TotalMinutesAsleep),min_asleep = min(TotalMinutesAsleep), mean_asleep = mean(TotalMinutesAsleep))
+
+```
+
+It has information about 24 users (more than the 70% of the population) but there are only 15 users that have more than 15 observations, which represent the 50% of the time range analyzed.
+
+It can be observed that some users have really short sleep records some days, which is not normal and seem to be bad lectures, so I am going to discard the sleep records under 4h. I have also checked if there are records with less time in bed than asleep minutes but it seems that there are not errors like that. After arranging the time to date format and discarding some observations, the table looks like this:
+
+```{r}
+sleep_clean <- sleep %>%
+   rename_with(tolower) %>%
+   clean_names() %>%
+   rename(date=sleepday,sleep_records=totalsleeprecords,minutes_asleep=totalminutesasleep,time_bed=totaltimeinbed) %>%
+   mutate(date=format(as.POSIXct(date, format="%m/%d/%Y %I:%M:%S %p", tz=Sys.timezone()), format = "%m/%d/%y")) %>%
+   filter(minutes_asleep>240)
+
+```
+
+* ### Activity Records
+
+```{r}
+skim_without_charts(activity)
+```
+
+```{r}
+activity  %>%
+  group_by(Id) %>%
+   summarize(max_steps = max(TotalSteps),min_steps = min(TotalSteps), mean_steps = mean(TotalSteps))
+
+```
+
+The table contains a numeric Id for the different users, numeric values for the activity observations and the time .
+
+It is clearly seen that their are no null records. Also their are some columns which is incorrectly formatted like Activity. I am also going to ignore these observations that present a total of daily steps under 100, as all persons have some little activity every day. I am not going to analyse the different intensities distances, but the time. The result table for analysis is the following one:
+
+```{r}
+activity_clean <- activity %>%
+   select(Id, ActivityDate, TotalSteps, TotalDistance, VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes, SedentaryMinutes, Calories) %>%
+   rename_with(tolower) %>%
+   clean_names() %>%
+   rename(date=activitydate,total_steps=totalsteps,total_distance=totaldistance,very_active_min=veryactiveminutes,fairly_active_min=fairlyactiveminutes,lightly_active_min=lightlyactiveminutes,sedentary_min=sedentaryminutes) %>%
+   mutate(date=format(as.POSIXct(date, format="%m/%d/%Y", tz=Sys.timezone()), format = "%m/%d/%y")) %>%
+   filter(total_steps>100)
+
+```
+
+## 4. Analyze and 5. Share
+First of all, I am going to transform the heart rate table to have daily records instead of seconds values and allow me to merge and compare these observations with the other tables.
+
+As the heart rate dataset has less users than the others, I am going to merge first the sleep and activity observations.
+
+```{r}
+daily_activity_merged <- merge(sleep_clean, activity_clean, by=c('id', 'date'))
+ head(daily_activity_merged)
+
+```
+
+Let’s take a quick look at the table statistics:
+
+```{r}
+summary(daily_activity_merged)
+```
+
+With this first summary it can be observed that:
+
+* The users sleep an average of 7.3 hours and are in bed an average of 8 hours.
+* The users walk an average of 8000 steps and 6 Km, which is the recommended.
+* The average sedentary time of the users is around 11 hours, which seems a lot,  and 40 min of active time.
+
+I am going to first compare the total steps with different activity parameters.
+
+```{r}
+ggplot(data=daily_activity_merged, aes(x=total_steps, y=total_distance)) + 
+  geom_point() + geom_smooth() + labs(title="Total Steps vs. Distance",x="Total Steps" ,y="Total Distance (Km)" )
+
+ggplot(data=daily_activity_merged, aes(x=total_steps, y=sedentary_min)) + 
+  geom_point() + geom_smooth() + labs(title="Total Steps vs. Sedentary Time",x="Total Steps" ,y="Sedentary Time (min)" )
+
+ggplot(data=daily_activity_merged, aes(x=total_steps, y=very_active_min+fairly_active_min+lightly_active_min)) + 
+  geom_point() + geom_smooth() + labs(title="Total Steps vs. Active Time",x="Total Steps" ,y="Active Time (min)" )
+
+ggplot(data=daily_activity_merged, aes(x=total_steps, y=calories)) + 
+  geom_point() + geom_smooth() + labs(title="Total Steps vs. Calories",x="Total Steps" ,y="Calories" )
+
+```
+
+The number of steps taken by a user daily is proportional with the walked distance as expected. It seems that the active time also increases with the steps taken but it’s not as linear and the same happens with the calories. In the case of the sedentary time, it shows an inverse relation with the steps but it’s very scattered.
+
+Let’s see which relationships appear comparing the active time with the sedentary time and calories.
+
+```{r}
+ggplot(data=daily_activity_merged, aes(x=very_active_min+fairly_active_min+lightly_active_min, y=sedentary_min)) + 
+  geom_point() + geom_smooth() + labs(title="Active vs. Sedentary Time",x="Active Time (min)" ,y="Sedentary Time (min)" )
+
+ggplot(data=daily_activity_merged, aes(x=very_active_min+fairly_active_min+lightly_active_min, y=calories)) + 
+  geom_point() + geom_smooth() + labs(title="Active Time vs. Calories",x="Active Time (min)" ,y="Calories" )
+
+```
+
+It is also expected that the sedentary time decreases when the active time is higher and the calories increase with the active time.
+
+Now that we have checked that the activity trends are the expected ones, let’s see which relationship appears between the sleep time and the activity time.
+
+```{r}
+ggplot(data=daily_activity_merged, aes(x=minutes_asleep, y=very_active_min+fairly_active_min+lightly_active_min)) + 
+  geom_point() + geom_smooth() + labs(title="Sleep Time vs. Active Time",x="Sleep Time (min)" ,y="Active Time (min)" )
+
+ggplot(data=daily_activity_merged, aes(x=minutes_asleep, y=sedentary_min)) + 
+  geom_point() + geom_smooth() + labs(title="Sleep Time vs. Sedentary Time",x="Sleep Time (min)" ,y="Sedentary Time (min)" )
+
+```
+
+From these plots we can observe that users who sleep over 10 hours are less active and a bit more sedentary. Sleeping under 10 hours does not present a direct relation with the active time but it seems that the sedentary lifestyle decreases when users sleep up to 10 hours.
+
+Let’s take a look at the heart rate statistics:
+```{r}
+heartrate_hour <- heartrate_clean %>%
+   mutate(time=format(strptime(time,"%H:%M:%S"),'%H:00:00')) %>%
+   group_by(id, date, time) %>%
+   summarize(rate_value=mean(rate_value))
+
+```
+
+```{r}
+summary_heartrate_hour <- heartrate_hour %>%
+   group_by(time) %>%
+   summarize(avg_rate = mean(rate_value),min_rate = min(rate_value), max_rate = max(rate_value))
+
+```
+
+```{r}
+ggplot(data=summary_heartrate_hour, aes(x=time,y=avg_rate)) + 
+  geom_bar(stat="identity", fill='darkblue') + labs(title="Average Heart Rate per Hour",x="Daily Hours" ,y="Heart Rate" ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+```{r}
+ggplot(data=summary_heartrate_hour, aes(x=time,y=max_rate)) + 
+  geom_bar(stat="identity", fill='darkblue') + labs(title="Maximum Heart Rate per Hour",x="Daily Hours" ,y="Heart Rate" ) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+The average Heart Rate makes sense, as it presents lower values for the sleeping hours (from 23:00 to 5:00). The higher maximum rates appear during the morning (from 12:00 to 14:00), the afternoon (from 16:00 to 18:00) and at the evening (22:00) which can be the time ranges at which the users exercise.
+
+Let’s now merge the daily average heart rates with the activity table.
+
+```{r}
+heartrate_daily <- heartrate_clean %>%
+   group_by(id,date) %>%
+   summarize(max_rate = max(rate_value),min_rate = min(rate_value), mean_rate = mean(rate_value))
+
+
+```
+
+```{r}
+daily_merged <- merge(daily_activity_merged, heartrate_daily , by=c('id', 'date'))
+head(daily_merged)
+
+```
+
+```{r}
+ggplot(data=daily_merged, aes(x=max_rate, y=calories)) + 
+  geom_point() + geom_smooth() + labs(title=" Max heart rate vs calories",x="Max heart rate " ,y="calories" )
+
+
+ggplot(data=daily_merged, aes(x=max_rate, y=lightly_active_min
+)) + 
+  geom_point() + geom_smooth() + labs(title=" Max heart rate vs Active time",x="Max heart rate " ,y="Active time" )
+
+```
+
+It seems that there exists a relationship between the heart rate and consumed calories. Users consume more calories these days that have higher maximum heart rates, which is also related with the activity.
+
+Let’s finally analyse which percentage of the day users usually spend for each type of activity.
+
+```{r}
+daily_activity_summary <- daily_merged %>%
+   summarise(time_in_bed = mean(time_bed), sedentary_minutes = mean(sedentary_min), lightly_active_minutes = mean(lightly_active_min), fairly_active_minutes = mean(fairly_active_min), very_active_minutes = mean(very_active_min))
+
+```
+
+```{r}
+daily_summary_long <- daily_activity_summary*100/(daily_activity_summary$time_in_bed + daily_activity_summary$sedentary_minutes + daily_activity_summary$lightly_active_minutes + daily_activity_summary$fairly_active_minutes + daily_activity_summary$very_active_minutes)
+```
+
+```{r}
+gather(daily_summary_long) 
+```
+
+```{r}
+daily_summ_long <- gather(daily_summary_long)
+```
+
+```{r}
+ggplot(daily_summ_long, aes(x="", y=value, fill=factor(key))) +
+  geom_bar(width = 1, size = 1, color = "white", stat = "identity") +
+  coord_polar("y", start=0) +
+geom_text(aes(label = paste0(round(value), "%")), 
+              position = position_stack(vjust = 0.5)) +
+    labs(x = NULL, y = NULL, fill = NULL, 
+         title = "Activity in an average day") +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_void()
+
+```
+
+On average, users spend 47% of the day doing sedentary activities and a 34% in bed, which leaves only 19% of real activity time.
+
+
+We can check that the sum of the different activities is around 24 hours.
+
+
+
+On average, users spend 47% of the day doing sedentary activities and a 34% in bed, which leaves only 19% of real activity time.
+
+## 6. Act
+Now on the basis of my data analysis I have found that :-
+
+Users sleep on average 8 hours a day in night hours, between 22:00 and 6:00, which is the time range at which they are more relaxed based on their heart rate.
+Users seem to exercise more in the afternoon, which could be because they work/study in the morning.
+Users walk an average of 8000 steps and 6 Km per day, which is recommended for a quite active lifestyle.
+Nevertheless, users spend on average 47% of the day doing sedentary activities.
+From this bullet points, we can construct an average profile of FitBit users:
+
+It seems that the average users are adult people, who work or study in static positions (which implies sitting a lot of hours), and exercise in their free time.
+
+
+Bellabeat marketing strategy can be focused on showing to women the advantages of having knowledge of its healthy lifestyle.
+
+* Walking influences daily activity and calories consumed, so trying to reach a goal or having low activity alarms can help improve these good habits.
+* Sleeping between 7-10 hours results in a more active day, so knowing the sleeping habits can help redirect them to be more efficient.
+* High heart rates, which are not related with high intensity activities may be a sign of stress or anxiety, which can be alerted with Bellabeat products.
+
